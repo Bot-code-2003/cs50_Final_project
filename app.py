@@ -3,12 +3,34 @@ import requests
 from time import sleep
 from tabulate import tabulate
 import csv
-def main():
-  name, city = Intro()
-  keyflow(f"{name}...")
-  # fetch_weather(city)
-  task_manager(name)
+import os
+from datetime import date
+import bcrypt
 
+def main():
+  salt = bcrypt.gensalt()
+  keyflow("1. Register\n2. Login\n3. Logout\n")
+  keyflow("Choose option: ")
+  choice = input()
+  match choice:
+      
+      case "1": 
+          if register():
+            username, password, city = login()
+          if username is not None:
+              keyflow("Login success!\n")
+              keyflow(f"Hello {username}, I am Robin, your personal productivity manager.\n")
+              fetch_weather(city)
+              task_manager(username)
+      case "2": 
+          username, password, city = login()
+          if username is not None:
+              keyflow("Login success!\n")
+              keyflow(f"Hello {username}, I am Robin, your personal productivity manager.\n")
+              fetch_weather(city)
+              task_manager(username)
+      case "3":
+          keyflow("Good Bye\n")
 # Typing effect
 def keyflow(Title):
   for char in Title:
@@ -29,30 +51,40 @@ def load_info_from_csv():
 
 # Save the first time user info.
 def save_info_to_csv(personal_info):
-    with open('personal_info.csv', "w", newline="") as file:
-        fieldnames = ['name', 'city']
+    file_exists = os.path.isfile('personal_info.csv')
+    with open('personal_info.csv', "a", newline="") as file:
+        fieldnames = ['username', 'password', 'city']
         writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(personal_info)  # Write a single row with the personal_info dictionary
+        if not file_exists:  # Check if file exists and is empty
+            writer.writeheader()
+        writer.writerows(personal_info) 
 
 
-# Introduction Chat
-def Intro():
-    personal_info = load_info_from_csv()
-    if len(personal_info) == 0:
-        Title = "Hello user! I am Robin, your personal productivity manager.\nBy the way let me know a bit about u so i can give u personalised experience!!\n"
-        keyflow(Title)
-        keyflow("Your name :")
-        name = input()
-        keyflow("The city that u currently live in? ")
-        city = input()
-        personal_info.append({'name': name, "city": city})
-        save_info_to_csv(personal_info)
-    else:
-        name = personal_info[0]['name']  # Retrieve name from personal_info dictionary
-        city = personal_info[0]['city']  # Retrieve city from personal_info dictionary
-        keyflow(f"Welcome Back {name}\n")
-    return name, city
+personal_info = []
+def register():
+    print("REGISTER")
+    keyflow("Welcome user! I am Robin, your personal productivity manager.\n")
+    keyflow("Username: ")
+    username = input()
+    keyflow("Password: ")
+    password = input()
+    keyflow("City: ")
+    city = input()
+    personal_info.append({"username": username, "password": password, "city": city })
+    save_info_to_csv(personal_info)
+    return True
+
+def login():
+    personal_info = load_info_from_csv()  # Note the parenthesis to actually call the function
+    print("LOGIN")
+    print("Welcome user! I am Robin, your personal productivity manager.")
+    username = input("Username: ")
+    password = input("Password: ")
+    for info in personal_info:
+        if info['username'] == username and info['password'] == password:
+            return info['username'], info['password'], info['city']
+    print("Invalid username or password. Please try again.")
+    return None, None, None
 
 # Fetch weather and respond accordingly
 def fetch_weather(city):
@@ -105,25 +137,32 @@ def fetch_weather(city):
             keyflow(f"Sorry, I'm unable to get weather info for {city}. Please try again.\n")
             city = input("Enter a different city: ")
 
-def load_tasks_from_csv():
+# Load the tasks of user from tasks.csv if exists
+def load_tasks_from_csv(name):
     tasks = []
     try:
         with open('tasks.csv', 'r') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                tasks.append(row)
+                if row['User'] == name:
+                    tasks.append(row)
     except FileNotFoundError:
         pass
     return tasks
 
+# Save the user tasks to tasks.csv
 def save_tasks_to_csv(tasks):
-    with open('tasks.csv', 'w', newline='') as file:  # Change mode to 'w' to overwrite existing file and write headers
+    file_exists = os.path.isfile('tasks.csv')
+    with open('tasks.csv', 'a', newline='') as file: 
         fieldnames = ['Task', 'Progress', 'User']
         writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(tasks)  # Use writerows to write multiple rows at once
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(tasks)
 
+# All the task manager working
 def task_manager(name):
+    today = date.today()
     print("\n--------------------")
     print("Productivity Manager")
     print("--------------------")
@@ -132,15 +171,15 @@ def task_manager(name):
         print("1. Task manager\n2. Goal setting\n3. Exit\n")
         choice = input("Enter your choice: ")
         if choice == "1":
-            tasks = load_tasks_from_csv()
-            print(tasks)
+            tasks = load_tasks_from_csv(name)
+            newTasks = []
             while True:
-                print("\nMENU\n1. Add task\n2. Delete task\n3. Edit task\n4. Display\n5. Exit\n")
+                print("\nMENU\n1. Add task\n2. Delete task\n3. Display\n4. Exit\n")
                 todoChoice = input("Enter your choice: ")
                 if todoChoice == "1":
                     task = input("Task: ")
-                    progress = "Not started"  # Default progress
-                    tasks.append({'Task': task, 'Progress': progress, 'User': name})
+                    progress = today.strftime("%B %d, %Y")  # Default progress
+                    newTasks.append({'Task': task, 'Progress': progress, 'User': name})
                     print("Task added successfully.\n")
                 elif todoChoice == "2":
                     if len(tasks) == 0:
@@ -148,51 +187,28 @@ def task_manager(name):
                     else:
                         print("DELETE TASK\n")
                         headers = ["S.no", "Task", "Progress"]
-                        table = [(i, task['Task'], task['Progress']) for i, task in enumerate(tasks, start=1)]
+                        all_tasks = tasks + newTasks
+                        table = [(i, task['Task'], task['Progress']) for i, task in enumerate(all_tasks, start=1)]
                         print(tabulate(table, headers, tablefmt="grid"))
                         choice = int(input("\nChoose the task number to delete: "))
-                        if choice in range(1, len(tasks) + 1):
-                            del tasks[choice - 1]
+                        if choice in range(1, len(all_tasks) + 1):
+                            del all_tasks[choice - 1]
                             print("Task deleted successfully.\n")
                         else:
                             print("Invalid task number.")
                 elif todoChoice == "3":
-                    if len(tasks) == 0:
-                        print("No tasks to edit\n")
-                    else:
-                        print("EDIT TASK\n")
-                        headers = ["S.no", "Task", "Progress"]
-                        table = [(i, task['Task'], task['Progress']) for i, task in enumerate(tasks, start=1)]
-                        print(tabulate(table, headers, tablefmt="grid"))
-                        choice = int(input("\nChoose the task number to edit: "))
-                        if choice in range(1, len(tasks) + 1):
-                            task_to_edit = tasks[choice - 1]
-                            print(f"Editing task '{task_to_edit['Task']}':\n")
-                            print("1. Edit task name\n2. Edit progress status\n")
-                            edit_choice = input("Enter your choice: ")
-                            if edit_choice == "1":
-                                new_task_name = input("Enter new task name: ")
-                                task_to_edit['Task'] = new_task_name
-                                print("Task name edited successfully.\n")
-                            elif edit_choice == "2":
-                                new_progress = input("Enter new progress status: ")
-                                task_to_edit['Progress'] = new_progress
-                                print("Progress status edited successfully.\n")
-                            else:
-                                print("Invalid choice.")
-                        else:
-                            print("Invalid task number.")
-                elif todoChoice == "4":
-                    if len(tasks) == 0:
+                    # print(newTasks)
+                    if len(tasks)==0 and len(newTasks) == 0:
                         print("No tasks to display.\n")
                     else:
-                        headers = ["S.no", "Task", "Progress"]
-                        table = [(i, task['Task'], task['Progress']) for i, task in enumerate(tasks, start=1)]
+                        all_tasks = newTasks + tasks
+                        headers = ["S.no", "Task", "Date"]
+                        table = [(i, task['Task'], task['Progress']) for i, task in enumerate(all_tasks, start=1)]
                         print("\n")
-                        print(tabulate(table, headers, tablefmt="grid"))
+                        print(tabulate(table, headers, tablefmt="pretty"))
                         print("\n")
-                elif todoChoice == "5":
-                    save_tasks_to_csv(tasks)
+                elif todoChoice == "4":
+                    save_tasks_to_csv(newTasks)
                     print(f"Goodbye, {name}. Have a great day!\n")
                     break
                 else:
